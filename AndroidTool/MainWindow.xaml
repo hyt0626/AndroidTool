@@ -1,0 +1,62 @@
+<Window x:Class="AndroidTool.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Android 调试工具" Height="860" Width="1280" MinHeight="700" MinWidth="1040" Background="#F5F7FA">
+    <Window.Resources>
+        <Style TargetType="Button"><Setter Property="Padding" Value="12,6"/><Setter Property="Margin" Value="3"/></Style>
+        <Style x:Key="Label" TargetType="TextBlock"><Setter Property="Foreground" Value="#667085"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
+        <Style x:Key="Value" TargetType="TextBlock"><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
+        <Style x:Key="ApkCard" TargetType="Border">
+            <Setter Property="Width" Value="570"/><Setter Property="Margin" Value="6"/><Setter Property="Padding" Value="12"/>
+            <Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="#D0D5DD"/><Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/><Setter Property="Cursor" Value="Hand"/><Setter Property="Focusable" Value="True"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#F6FBF8"/><Setter Property="BorderBrush" Value="#86CFA4"/></Trigger>
+                <DataTrigger Binding="{Binding IsCurrentSelected}" Value="True"><Setter Property="Background" Value="#EAF8EF"/><Setter Property="BorderBrush" Value="#12B76A"/><Setter Property="BorderThickness" Value="2"/></DataTrigger>
+                <DataTrigger Binding="{Binding IsBusy}" Value="True"><Setter Property="Cursor" Value="Arrow"/></DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="SelectedBadge" TargetType="Border">
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Style.Triggers><DataTrigger Binding="{Binding IsCurrentSelected}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="16">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="150"/></Grid.RowDefinitions>
+        <DockPanel><TextBlock Text="Android 调试工具" FontSize="24" FontWeight="SemiBold"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Margin="12,0"/><Button Content="刷新设备" Click="RefreshDevice_Click"/></StackPanel></DockPanel>
+        <Border Grid.Row="1" Padding="12" Margin="0,12" Background="White" CornerRadius="8" BorderBrush="#E4E7EC" BorderThickness="1">
+            <UniformGrid Columns="7">
+                <StackPanel><TextBlock Text="序列号" Style="{StaticResource Label}"/><TextBlock Text="{Binding Serial}" Style="{StaticResource Value}"/></StackPanel>
+                <StackPanel><TextBlock Text="品牌" Style="{StaticResource Label}"/><TextBlock Text="{Binding Brand}" Style="{StaticResource Value}"/></StackPanel>
+                <StackPanel><TextBlock Text="型号" Style="{StaticResource Label}"/><TextBlock Text="{Binding Model}" Style="{StaticResource Value}"/></StackPanel>
+                <StackPanel><TextBlock Text="Android" Style="{StaticResource Label}"/><TextBlock Text="{Binding AndroidVersion}" Style="{StaticResource Value}"/></StackPanel>
+                <StackPanel><TextBlock Text="电量" Style="{StaticResource Label}"/><TextBlock Text="{Binding Battery}" Style="{StaticResource Value}"/></StackPanel>
+                <StackPanel><TextBlock Text="IP 地址" Style="{StaticResource Label}"/><TextBlock Text="{Binding IpAddress}" Style="{StaticResource Value}"/><Button Content="投屏" Padding="7,2" HorizontalAlignment="Left" Click="OpenCast_Click"/></StackPanel>
+                <StackPanel><TextBlock Text="内部存储" Style="{StaticResource Label}"/><TextBlock Text="{Binding Storage}" Style="{StaticResource Value}" TextWrapping="Wrap"/></StackPanel>
+            </UniformGrid>
+        </Border>
+        <TabControl Grid.Row="2">
+            <TabItem Header="APK 操作"><Grid Margin="10"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <DockPanel Margin="0,0,0,8"><StackPanel Orientation="Horizontal"><Button Content="追加选择 APK" Click="AddApk_Click"/><RadioButton Content="安装" GroupName="Mode" IsChecked="True" Margin="10,0" VerticalAlignment="Center" Checked="InstallMode_Checked"/><RadioButton Content="卸载" GroupName="Mode" Margin="10,0" VerticalAlignment="Center" Checked="UninstallMode_Checked"/><RadioButton Content="启动" GroupName="Mode" Margin="10,0" VerticalAlignment="Center" Checked="LaunchMode_Checked"/><CheckBox Content="启动时单选" IsChecked="{Binding LaunchSingleSelect}" Margin="12,0" VerticalAlignment="Center"/></StackPanel><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><TextBlock Text="{Binding SelectedCountText}" Foreground="#067647" FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0"/><Button Content="清除当前勾选" Click="ClearSelection_Click"/><Button Content="开始执行" Background="#1677FF" Foreground="White" Click="StartOperation_Click"/></StackPanel></DockPanel>
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"><ItemsControl ItemsSource="{Binding Items}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel><ItemsControl.ItemTemplate><DataTemplate>
+                    <Border Style="{StaticResource ApkCard}" Tag="{Binding}" MouseLeftButtonUp="ApkCard_MouseLeftButtonUp" KeyDown="ApkCard_KeyDown" ToolTip="点击卡片选择或取消；操作按钮不会改变选择"><Grid><Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/><Border Grid.Column="1" Style="{StaticResource SelectedBadge}" Background="#12B76A" CornerRadius="10" Padding="8,3" Margin="8,0" VerticalAlignment="Center"><TextBlock Text="✓ 已选" Foreground="White" FontWeight="SemiBold"/></Border><StackPanel Grid.Column="2" Orientation="Horizontal"><Button Content="选择 OBB" Tag="{Binding}" Click="SelectObb_Click"/><Button Content="删除" Tag="{Binding}" Click="RemoveApk_Click"/></StackPanel></Grid>
+                        <Grid Grid.Row="1" Margin="0,8"><Grid.ColumnDefinitions><ColumnDefinition Width="88"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="完整路径" Style="{StaticResource Label}"/><TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding FullPath}" Style="{StaticResource Value}"/><Button Grid.Row="0" Grid.Column="2" Content="复制" Tag="{Binding FullPath}" Click="Copy_Click"/>
+                            <TextBlock Grid.Row="1" Text="文件" Style="{StaticResource Label}"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding FileName}" Style="{StaticResource Value}"/><Button Grid.Row="1" Grid.Column="2" Content="复制" Tag="{Binding FileName}" Click="Copy_Click"/>
+                            <TextBlock Grid.Row="2" Text="应用名" Style="{StaticResource Label}"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding ApplicationName}" Style="{StaticResource Value}"/><Button Grid.Row="2" Grid.Column="2" Content="复制" Tag="{Binding ApplicationName}" Click="Copy_Click"/>
+                            <TextBlock Grid.Row="3" Text="包名" Style="{StaticResource Label}"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding PackageName}" Style="{StaticResource Value}"/><Button Grid.Row="3" Grid.Column="2" Content="复制" Tag="{Binding PackageName}" Click="Copy_Click"/>
+                            <TextBlock Grid.Row="4" Text="版本名称" Style="{StaticResource Label}"/><TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding VersionName}" Style="{StaticResource Value}"/><Button Grid.Row="4" Grid.Column="2" Content="复制" Tag="{Binding VersionName}" Click="Copy_Click"/>
+                            <TextBlock Grid.Row="5" Text="版本代码" Style="{StaticResource Label}"/><TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding VersionCode}" Style="{StaticResource Value}"/><Button Grid.Row="5" Grid.Column="2" Content="复制" Tag="{Binding VersionCode}" Click="Copy_Click"/>
+                            <TextBlock Grid.Row="6" Text="minSdk" Style="{StaticResource Label}"/><TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding MinSdk}" Style="{StaticResource Value}"/><Button Grid.Row="6" Grid.Column="2" Content="复制" Tag="{Binding MinSdk}" Click="Copy_Click"/>
+                            <TextBlock Grid.Row="7" Text="targetSdk" Style="{StaticResource Label}"/><TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding TargetSdk}" Style="{StaticResource Value}"/><Button Grid.Row="7" Grid.Column="2" Content="复制" Tag="{Binding TargetSdk}" Click="Copy_Click"/>
+                        </Grid>
+                        <TextBlock Grid.Row="2" Text="{Binding ObbSummary}" Foreground="#475467" TextTrimming="CharacterEllipsis"/>
+                        <StackPanel Grid.Row="3" Margin="0,8,0,0"><DockPanel><TextBlock Text="{Binding Status}" FontWeight="SemiBold"/><TextBlock Text="{Binding Error}" Foreground="#D92D20" HorizontalAlignment="Right" TextTrimming="CharacterEllipsis"/></DockPanel><ProgressBar Height="8" Maximum="100" Value="{Binding Progress}" IsIndeterminate="{Binding IsIndeterminate}"/></StackPanel>
+                    </Grid></Border>
+                </DataTemplate></ItemsControl.ItemTemplate></ItemsControl></ScrollViewer>
+            </Grid></TabItem>
+            <TabItem Header="实时日志"><Grid Margin="10"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions><DockPanel><StackPanel Orientation="Horizontal"><Button Content="Android 日志" Click="AndroidLog_Click"/><Button Content="Unity 日志" Click="UnityLog_Click"/><Button Content="停止" Click="StopLog_Click"/><Button Content="清空" Click="ClearLog_Click"/><Button Content="导出" Click="ExportLog_Click"/><CheckBox x:Name="AutoScrollCheck" Content="自动滚动" IsChecked="True" Margin="12,0" VerticalAlignment="Center"/></StackPanel><TextBlock Text="{Binding LogStatus}" HorizontalAlignment="Right" VerticalAlignment="Center"/></DockPanel><TextBox x:Name="LogOutputBox" Grid.Row="1" Margin="0,8,0,0" IsReadOnly="True" IsUndoEnabled="False" UndoLimit="0" FontFamily="Consolas" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/></Grid></TabItem>
+            <TabItem Header="设置"><StackPanel Margin="18"><TextBlock Text="内置运行文件目录" FontSize="18" FontWeight="SemiBold"/><TextBox Text="{Binding RuntimeDirectory, Mode=OneWay}" IsReadOnly="True" Margin="0,8"/><WrapPanel><Button Content="打开目录" Click="OpenRuntime_Click"/><Button Content="清理旧版本" Click="ClearOldRuntime_Click"/><Button Content="清理全部并退出" Click="ClearAllRuntime_Click"/></WrapPanel><TextBlock Margin="4,10" Foreground="#667085" TextWrapping="Wrap" Text="清理全部会停止当前用户的 ADB 服务，可能暂时影响其他正在使用 ADB 的软件。再次启动时会自动重新释放内置工具。"/></StackPanel></TabItem>
+        </TabControl>
+        <GroupBox Grid.Row="3" Header="任务输出（仅开始与结果）" Margin="0,10,0,0"><TextBox Text="{Binding TaskOutput, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"/></GroupBox>
+    </Grid>
+</Window>

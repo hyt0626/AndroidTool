@@ -1,0 +1,29 @@
+# Visual Studio / .NET build output
+**/bin/
+**/obj/
+.vs/
+
+# Local publish and packaging output
+publish/
+publish-*/
+AndroidTool-portable/
+*.zip
+/*.exe
+
+# Runtime and local test data
+*.log
+logs/
+*.apk
+*.apks
+*.xapk
+*.obb
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# OS files
+Thumbs.db
+Desktop.ini
