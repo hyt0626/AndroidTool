@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Platforms>x64</Platforms>
+    <AssemblyName>AndroidTool</AssemblyName>
+    <RootNamespace>AndroidTool</RootNamespace>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\adb\adb.exe" LogicalName="Tools.adb.adb.exe" />
+    <EmbeddedResource Include="..\..\adb\AdbWinApi.dll" LogicalName="Tools.adb.AdbWinApi.dll" />
+    <EmbeddedResource Include="..\..\adb\AdbWinUsbApi.dll" LogicalName="Tools.adb.AdbWinUsbApi.dll" />
+    <EmbeddedResource Include="..\..\aapt\aapt.exe" LogicalName="Tools.aapt.aapt.exe" />
+  </ItemGroup>
+</Project>
