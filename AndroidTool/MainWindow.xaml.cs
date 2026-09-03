@@ -13,27 +13,55 @@ namespace AndroidTool;
 
 public partial class MainWindow : Window
 {
-    private readonly MainViewModel _viewModel = new();
+    private readonly MainViewModel _viewModel;
+    private readonly IDeviceRefreshController _deviceRefreshController;
     private readonly DispatcherTimer _logUiTimer;
+    private readonly DispatcherTimer _deviceMonitorTimer;
+    private readonly CancellationTokenSource _lifetimeCancellation = new();
+    private Task _initializationTask = Task.CompletedTask;
+    private Task _deviceCheckTask = Task.CompletedTask;
+    private Task _manualDeviceRefreshTask = Task.CompletedTask;
     private bool _closeInProgress;
     private bool _allowClose;
 
-    public MainWindow()
+    public MainWindow() : this(new MainViewModel())
     {
+    }
+
+    internal MainWindow(
+        MainViewModel viewModel,
+        IDeviceRefreshController? deviceRefreshController = null,
+        TimeSpan? deviceMonitorInterval = null)
+    {
+        _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+        _deviceRefreshController = deviceRefreshController ?? viewModel;
         InitializeComponent();
         DataContext = _viewModel;
         _logUiTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(100) };
         _logUiTimer.Tick += (_, _) => FlushLogOutput();
+        _deviceMonitorTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = deviceMonitorInterval ?? TimeSpan.FromSeconds(2) };
+        _deviceMonitorTimer.Tick += DeviceMonitorTimer_Tick;
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
     }
 
-    private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (_lifetimeCancellation.IsCancellationRequested || !_initializationTask.IsCompleted) return;
+        _initializationTask = InitializeWindowAsync(_lifetimeCancellation.Token);
+    }
+
+    private async Task InitializeWindowAsync(CancellationToken cancellationToken)
     {
         try
         {
-            await _viewModel.InitializeAsync();
+            await _deviceRefreshController.InitializeAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             _logUiTimer.Start();
+            _deviceMonitorTimer.Start();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
         }
         catch (Exception ex)
         {
@@ -50,15 +78,65 @@ public partial class MainWindow : Window
         _logUiTimer.Stop();
         try
         {
+            await StopDeviceMonitoringAsync();
             await _viewModel.StopLogAsync();
         }
         finally
         {
+            _lifetimeCancellation.Dispose();
             _allowClose = true;
             _ = Dispatcher.BeginInvoke(Close);
         }
     }
-    private async void RefreshDevice_Click(object sender, RoutedEventArgs e) => await _viewModel.RefreshDeviceAsync();
+
+    internal async Task StopDeviceMonitoringAsync()
+    {
+        _deviceMonitorTimer.Stop();
+        if (!_lifetimeCancellation.IsCancellationRequested) _lifetimeCancellation.Cancel();
+        await Task.WhenAll(_initializationTask, _deviceCheckTask, _manualDeviceRefreshTask);
+    }
+
+    private void DeviceMonitorTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_lifetimeCancellation.IsCancellationRequested || !_deviceCheckTask.IsCompleted) return;
+        _deviceCheckTask = CheckForDeviceChangeAsync(_lifetimeCancellation.Token);
+    }
+
+    private async Task CheckForDeviceChangeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _deviceRefreshController.RefreshDeviceIfChangedAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"自动检测设备失败：{ex}");
+        }
+    }
+
+    private void RefreshDevice_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lifetimeCancellation.IsCancellationRequested || !_manualDeviceRefreshTask.IsCompleted) return;
+        _manualDeviceRefreshTask = RefreshDeviceSafelyAsync(_lifetimeCancellation.Token);
+    }
+
+    private async Task RefreshDeviceSafelyAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _deviceRefreshController.RefreshDeviceAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"刷新设备失败：{ex.Message}", "AndroidTool", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
     private async void AddApk_Click(object sender, RoutedEventArgs e) { var dialog = new OpenFileDialog { Filter = "APK 文件|*.apk", Multiselect = true }; if (dialog.ShowDialog() == true) await _viewModel.AddApksAsync(dialog.FileNames); }
     private void InstallMode_Checked(object sender, RoutedEventArgs e) { if (DataContext is MainViewModel) _viewModel.SetMode(OperationMode.Install); }
     private void UninstallMode_Checked(object sender, RoutedEventArgs e) { if (DataContext is MainViewModel) _viewModel.SetMode(OperationMode.Uninstall); }
@@ -98,7 +176,7 @@ public partial class MainWindow : Window
     private async void ClearAllRuntime_Click(object sender, RoutedEventArgs e)
     {
         if (MessageBox.Show("将停止 ADB 服务、删除全部运行文件并退出。是否继续？", "清理运行文件", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
-        await _viewModel.StopLogAsync(); await _viewModel.KillAdbAsync();
+        await StopDeviceMonitoringAsync(); await _viewModel.StopLogAsync(); await _viewModel.KillAdbAsync();
         var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AndroidTool", "Runtime");
         try { if (Directory.Exists(root)) Directory.Delete(root, true); } catch (Exception ex) { MessageBox.Show($"清理失败：{ex.Message}"); return; }
         Application.Current.Shutdown();

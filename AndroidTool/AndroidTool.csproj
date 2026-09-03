@@ -14,11 +14,15 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <DebugType>embedded</DebugType>
+    <ApplicationIcon>Assets\Brand\android-tool.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="..\..\adb\adb.exe" LogicalName="Tools.adb.adb.exe" />
     <EmbeddedResource Include="..\..\adb\AdbWinApi.dll" LogicalName="Tools.adb.AdbWinApi.dll" />
     <EmbeddedResource Include="..\..\adb\AdbWinUsbApi.dll" LogicalName="Tools.adb.AdbWinUsbApi.dll" />
     <EmbeddedResource Include="..\..\aapt\aapt.exe" LogicalName="Tools.aapt.aapt.exe" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="AndroidTool.Tests" />
   </ItemGroup>
 </Project>

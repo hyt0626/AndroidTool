@@ -1,11 +1,11 @@
 namespace AndroidTool.Core;
 
-public sealed class AdbClient
+public sealed class AdbClient : IDeviceInfoSource
 {
     private readonly ToolPaths _paths;
-    private readonly ProcessRunner _runner;
+    private readonly IProcessRunner _runner;
 
-    public AdbClient(ToolPaths paths, ProcessRunner? runner = null)
+    public AdbClient(ToolPaths paths, IProcessRunner? runner = null)
     {
         _paths = paths;
         _runner = runner ?? new ProcessRunner();
@@ -22,17 +22,33 @@ public sealed class AdbClient
 
     public async Task<DeviceInfo?> ReadDeviceInfoAsync(CancellationToken cancellationToken = default)
     {
-        if (!await HasDeviceAsync(cancellationToken)) return null;
-        var serial = (await RunAsync(["get-serialno"], cancellationToken)).StandardOutput;
-        var brand = (await RunAsync(["shell", "getprop", "ro.product.brand"], cancellationToken)).StandardOutput;
-        var model = (await RunAsync(["shell", "getprop", "ro.product.model"], cancellationToken)).StandardOutput;
-        var version = (await RunAsync(["shell", "getprop", "ro.build.version.release"], cancellationToken)).StandardOutput;
-        var battery = (await RunAsync(["shell", "dumpsys", "battery"], cancellationToken)).StandardOutput;
-        var route = (await RunAsync(["shell", "ip", "route", "get", "1.1.1.1"], cancellationToken)).StandardOutput;
-        var storage = (await RunAsync(["shell", "df", "-h", "/data"], cancellationToken)).StandardOutput;
+        var serial = await GetConnectedSerialAsync(cancellationToken);
+        return serial is null ? null : await ReadDeviceInfoAsync(serial, cancellationToken);
+    }
+
+    public async Task<string?> GetConnectedSerialAsync(CancellationToken cancellationToken = default)
+    {
+        var result = await RunAsync(["devices"], cancellationToken);
+        return result.Succeeded ? AdbDeviceListParser.ParseSingleOnlineSerial(result.StandardOutput) : null;
+    }
+
+    public async Task<DeviceInfo?> ReadDeviceInfoAsync(string serial, CancellationToken cancellationToken = default)
+    {
+        var state = await RunForDeviceAsync(serial, ["get-state"], cancellationToken);
+        if (!state.Succeeded || !state.StandardOutput.Trim().Equals("device", StringComparison.OrdinalIgnoreCase)) return null;
+
+        var brand = (await RunForDeviceAsync(serial, ["shell", "getprop", "ro.product.brand"], cancellationToken)).StandardOutput;
+        var model = (await RunForDeviceAsync(serial, ["shell", "getprop", "ro.product.model"], cancellationToken)).StandardOutput;
+        var version = (await RunForDeviceAsync(serial, ["shell", "getprop", "ro.build.version.release"], cancellationToken)).StandardOutput;
+        var battery = (await RunForDeviceAsync(serial, ["shell", "dumpsys", "battery"], cancellationToken)).StandardOutput;
+        var route = (await RunForDeviceAsync(serial, ["shell", "ip", "route", "get", "1.1.1.1"], cancellationToken)).StandardOutput;
+        var storage = (await RunForDeviceAsync(serial, ["shell", "df", "-h", "/data"], cancellationToken)).StandardOutput;
         var details = DeviceDetailsParser.Parse(route, storage);
         return new DeviceInfoParser().Parse(serial, brand, model, version, battery) with { IpAddress = details.IpAddress, StorageDisplay = details.StorageDisplay };
     }
+
+    private Task<ProcessResult> RunForDeviceAsync(string serial, IEnumerable<string> args, CancellationToken cancellationToken) =>
+        RunAsync(new[] { "-s", serial }.Concat(args), cancellationToken);
 
     public Task<ProcessResult> InstallAsync(string apk, CancellationToken token = default) => RunAsync(["install", "-r", apk], token);
     public Task<ProcessResult> UninstallAsync(string packageName, CancellationToken token = default) => RunAsync(["uninstall", packageName], token);

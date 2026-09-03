@@ -6,7 +6,7 @@ using System.Windows;
 
 namespace AndroidTool.ViewModels;
 
-public sealed class MainViewModel : ObservableObject
+public sealed class MainViewModel : ObservableObject, IDeviceRefreshController
 {
     private readonly EmbeddedToolManager _toolManager = new(new ManifestToolSource());
     private readonly ConcurrentTaskRunner _taskRunner = new(3);
@@ -16,6 +16,10 @@ public sealed class MainViewModel : ObservableObject
     private readonly SynchronizationContext? _context = SynchronizationContext.Current;
     private ToolPaths? _paths;
     private AdbClient? _adb;
+    private IDeviceInfoSource? _deviceInfoSource;
+    private bool _hasDeviceSnapshot;
+    private string? _deviceSnapshotSerial;
+    private long _deviceRefreshGeneration;
     private CancellationTokenSource? _logCancellation;
     private Task<ProcessResult>? _logTask;
     private bool _operationRunning;
@@ -24,6 +28,15 @@ public sealed class MainViewModel : ObservableObject
     private string _statusText = "正在准备内置工具…";
     private string _serial = "—", _brand = "—", _model = "—", _androidVersion = "—", _battery = "—", _ipAddress = "—", _storage = "—";
     private string _taskOutput = "", _logStatus = "未启动", _logBaseStatus = "未启动";
+
+    public MainViewModel()
+    {
+    }
+
+    public MainViewModel(IDeviceInfoSource deviceInfoSource)
+    {
+        _deviceInfoSource = deviceInfoSource ?? throw new ArgumentNullException(nameof(deviceInfoSource));
+    }
 
     public ObservableCollection<ApkItemViewModel> Items { get; } = [];
     public OperationMode CurrentMode
@@ -62,18 +75,51 @@ public sealed class MainViewModel : ObservableObject
     public string LogStatus { get => _logStatus; set => SetProperty(ref _logStatus, value); }
     public string RuntimeDirectory => _paths?.Root ?? _toolManager.CacheRoot;
 
-    public async Task InitializeAsync()
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        _paths = await _toolManager.EnsureExtractedAsync();
+        cancellationToken.ThrowIfCancellationRequested();
+        _paths = await _toolManager.EnsureExtractedAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         _adb = new AdbClient(_paths);
+        _deviceInfoSource ??= _adb;
         RaisePropertyChanged(nameof(RuntimeDirectory));
-        await RefreshDeviceAsync();
+        await RefreshDeviceAsync(cancellationToken);
     }
 
-    public async Task RefreshDeviceAsync()
+    public async Task RefreshDeviceAsync(CancellationToken cancellationToken = default)
     {
-        if (_adb is null) return;
-        var info = await _adb.ReadDeviceInfoAsync();
+        if (_deviceInfoSource is null) return;
+        cancellationToken.ThrowIfCancellationRequested();
+        var serial = await _deviceInfoSource.GetConnectedSerialAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        var generation = Interlocked.Increment(ref _deviceRefreshGeneration);
+        await RefreshDeviceCoreAsync(serial, generation, cancellationToken);
+    }
+
+    public async Task RefreshDeviceIfChangedAsync(CancellationToken cancellationToken = default)
+    {
+        if (_deviceInfoSource is null) return;
+        cancellationToken.ThrowIfCancellationRequested();
+        var serial = await _deviceInfoSource.GetConnectedSerialAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_hasDeviceSnapshot && string.Equals(serial, _deviceSnapshotSerial, StringComparison.Ordinal)) return;
+        var generation = Interlocked.Increment(ref _deviceRefreshGeneration);
+        await RefreshDeviceCoreAsync(serial, generation, cancellationToken);
+    }
+
+    private async Task RefreshDeviceCoreAsync(string? serial, long generation, CancellationToken cancellationToken)
+    {
+        var info = serial is null ? null : await _deviceInfoSource!.ReadDeviceInfoAsync(serial, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (generation != Volatile.Read(ref _deviceRefreshGeneration)) return;
+
+        var connectedSerial = await _deviceInfoSource!.GetConnectedSerialAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (generation != Volatile.Read(ref _deviceRefreshGeneration) ||
+            !string.Equals(serial, connectedSerial, StringComparison.Ordinal)) return;
+
+        _hasDeviceSnapshot = true;
+        _deviceSnapshotSerial = info?.Serial;
         if (info is null) { StatusText = "未检测到设备"; Serial = Brand = Model = AndroidVersion = Battery = IpAddress = Storage = "—"; return; }
         StatusText = "设备已连接"; Serial = info.Serial; Brand = info.Brand; Model = info.Model; AndroidVersion = info.AndroidVersion;
         Battery = info.BatteryPercent is null ? "—" : $"{info.BatteryPercent}%"; IpAddress = info.IpAddress ?? "—"; Storage = info.StorageDisplay;

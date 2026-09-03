@@ -8,12 +8,20 @@ public sealed record ProcessResult(int ExitCode, string StandardOutput, string S
     public bool Succeeded => ExitCode == 0;
 }
 
-public sealed class ProcessRunner
+public interface IProcessRunner
+{
+    Task<ProcessResult> RunAsync(string fileName, IEnumerable<string> arguments, CancellationToken cancellationToken = default);
+    Task<ProcessResult> RunStreamingAsync(string fileName, IEnumerable<string> arguments, Action<string>? onLine, CancellationToken cancellationToken = default);
+    Task<ProcessResult> RunStreamingNoCaptureAsync(string fileName, IEnumerable<string> arguments, Action<string>? onLine, CancellationToken cancellationToken = default);
+}
+
+public sealed class ProcessRunner : IProcessRunner
 {
     private const int StreamingErrorLimit = 16 * 1024;
 
     public async Task<ProcessResult> RunAsync(string fileName, IEnumerable<string> arguments, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var startInfo = new ProcessStartInfo
         {
             FileName = fileName,
@@ -30,7 +38,27 @@ public sealed class ProcessRunner
         process.Start();
         var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
+        var waitForExit = process.WaitForExitAsync(cancellationToken);
+        using var cancellationRegistration = cancellationToken.Register(() => TryKill(process));
+        try
+        {
+            await Task.WhenAll(stdout, stderr, waitForExit).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            TryKill(process);
+            await WaitForExitAfterCancellationAsync(process).ConfigureAwait(false);
+            await IgnoreCancellationAsync(stdout).ConfigureAwait(false);
+            await IgnoreCancellationAsync(stderr).ConfigureAwait(false);
+            throw;
+        }
+        catch
+        {
+            TryKill(process);
+            await WaitForExitAfterCancellationAsync(process).ConfigureAwait(false);
+            throw;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
         return new ProcessResult(process.ExitCode, await stdout, await stderr);
     }
 
